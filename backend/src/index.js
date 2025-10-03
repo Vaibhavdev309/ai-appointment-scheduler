@@ -27,14 +27,19 @@ const upload = multer({
 });
 
 // Import controllers and middleware
-const { extractText, extractEntities, normalizeAppointment, getFinalAppointmentJson } = require('./controllers/appointmentController'); // Updated import
+const {
+    extractTextController,
+    extractEntitiesController,
+    normalizeAppointmentController,
+    getFinalAppointmentJsonController
+} = require('./controllers/appointmentController'); // Updated import names
 const { validateInput } = require('./middleware/validation');
 
 // API Routes: Apply upload and validation middleware to all endpoints that accept initial input
-app.post('/api/appointments/extract-text', upload.single('image'), validateInput, extractText);
-app.post('/api/appointments/extract-entities', upload.single('image'), validateInput, extractEntities);
-app.post('/api/appointments/normalize', upload.single('image'), validateInput, normalizeAppointment);
-app.post('/api/appointments/final-json', upload.single('image'), validateInput, getFinalAppointmentJson); // New endpoint
+app.post('/api/appointments/extract-text', upload.single('image'), validateInput, extractTextController);
+app.post('/api/appointments/extract-entities', upload.single('image'), validateInput, extractEntitiesController);
+app.post('/api/appointments/normalize', upload.single('image'), validateInput, normalizeAppointmentController);
+app.post('/api/appointments/final-json', upload.single('image'), validateInput, getFinalAppointmentJsonController);
 
 // 404 and error handlers
 app.use((req, res) => {

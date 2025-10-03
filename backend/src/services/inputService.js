@@ -1,13 +1,21 @@
 const { callGemini } = require('../utils/gemini');
+const RequestContext = require('../utils/requestContext'); // Import RequestContext
 
 /**
  * Processes input (text or image) to extract raw text via Gemini (OCR for images).
- * @param {string} input - Text string or base64 image.
- * @param {boolean} isImage - True if base64 image.
- * @param {string} mimeType - MIME type for image.
+ * @param {RequestContext} context - The request context object.
  * @returns {Promise<{raw_text: string, confidence: number}>}
  */
-async function extractRawText(input, isImage = false, mimeType = 'image/jpeg') {
+async function extractRawText(context) {
+    const STEP_NAME = 'rawTextExtraction';
+    let cachedResult = context.get(STEP_NAME);
+    if (cachedResult) {
+        console.log('Cache hit: rawTextExtraction');
+        return cachedResult;
+    }
+
+    const { input, isImage, mimeType } = context;
+
     if (!input) {
         throw new Error('Input is required');
     }
@@ -24,20 +32,23 @@ async function extractRawText(input, isImage = false, mimeType = 'image/jpeg') {
     try {
         const { text, confidence } = await callGemini(fullPrompt, isImage ? input : null, mimeType);
 
-        // Parse raw_text from response (Gemini outputs text + JSON; extract first part)
         const jsonStart = text.indexOf('{');
         const rawText = jsonStart > 0 ? text.substring(0, jsonStart).trim() : text;
 
-        return {
+        const result = {
             raw_text: rawText || input,
             confidence: confidence || (isImage ? 0.85 : 0.95)
         };
+        context.set(STEP_NAME, result); // Cache the result
+        return result;
     } catch (error) {
         console.error('Raw Text Extraction Error:', error.message);
-        return {
+        const result = {
             raw_text: isImage ? '' : input,
             confidence: 0.0
         };
+        context.set(STEP_NAME, result); // Cache the error result too
+        return result;
     }
 }
 

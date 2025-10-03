@@ -1,24 +1,39 @@
 const { callGemini } = require('../utils/gemini');
+const { extractEntities } = require('./entityService'); // Import entity extraction
 
 /**
  * Normalizes extracted entities into a standard ISO format.
- * @param {{date_phrase: string, time_phrase: string, department: string, notes: string}} entities - Entities from Step 2.
- * @param {number} entitiesConfidence - Confidence from Step 2.
+ * @param {RequestContext} context - The request context object.
  * @returns {Promise<{normalized: {date: string, time: string, tz: string}, normalization_confidence: number} | {status: string, message: string}>}
  */
-async function normalizeAppointment(entities, entitiesConfidence) {
+async function normalizeAppointment(context) {
+    const STEP_NAME = 'normalization';
+    let cachedResult = context.get(STEP_NAME);
+    if (cachedResult) {
+        console.log('Cache hit: normalization');
+        // If a guardrail was triggered and cached, return it directly
+        if (cachedResult.status === "needs_clarification") {
+            return cachedResult;
+        }
+        return cachedResult;
+    }
+
     const TIMEZONE = "Asia/Kolkata";
-    const CLARIFICATION_THRESHOLD = 0.6; // Define a threshold for clarification
+    const CLARIFICATION_THRESHOLD = 0.6;
+
+    // Ensure entities are extracted first (will use cache if available)
+    const entityExtraction = await extractEntities(context);
+    const entities = entityExtraction.entities;
+    const entitiesConfidence = entityExtraction.extraction_confidence;
 
     // Initial check: If no entities or very low confidence from previous steps,
     // immediately return needs_clarification.
-    if (!entities || Object.values(entities).every(val => val === '') || entitiesConfidence < 0.5) {
-        console.log('Normalization Guardrail Triggered: Low initial entities confidence or no entities.');
-        return { status: "needs_clarification", message: "Ambiguous date/time or department" };
+    if (!entities || Object.values(entities).every(val => val === '') || entitiesConfidence < 0.5) { // Adjusted threshold for initial check
+        const clarificationResult = { status: "needs_clarification", message: "Ambiguous date/time or department" };
+        context.set(STEP_NAME, clarificationResult);
+        return clarificationResult;
     }
 
-    // Construct a more detailed prompt for Gemini to handle date/time inference
-    // WITHOUT asking it to calculate the detailed confidence.
     const prompt = `You are an appointment normalization assistant. Given the following extracted appointment details, convert them into a standardized JSON format.
   Assume today's date is ${new Date().toISOString().split('T')[0]} and the timezone is ${TIMEZONE} for relative date/time calculations.
 
@@ -47,7 +62,6 @@ async function normalizeAppointment(entities, entitiesConfidence) {
         const { text, confidence: geminiConfidence } = await callGemini(prompt);
 
         let normalized = { date: '', time: '', tz: TIMEZONE };
-        // Reverted confidence calculation: simply combine with previous step's confidence
         let normalization_confidence = Math.min(geminiConfidence, entitiesConfidence);
 
         try {
@@ -56,14 +70,13 @@ async function normalizeAppointment(entities, entitiesConfidence) {
                 normalized = JSON.parse(jsonMatch[0]);
             } else {
                 console.warn('No valid JSON in Gemini response for normalization:', text.substring(0, 100));
-                normalization_confidence *= 0.5; // Penalize bad output
+                normalization_confidence *= 0.5;
             }
         } catch (parseError) {
             console.error('JSON Parse Error in normalization:', parseError.message, 'Response:', text);
             normalization_confidence = 0.0;
         }
 
-        // Ensure the output matches the exact format
         const finalNormalizedOutput = {
             normalized: {
                 date: normalized.date || '',
@@ -75,15 +88,19 @@ async function normalizeAppointment(entities, entitiesConfidence) {
 
         // --- GUARDRAIL CONDITION ---
         if (finalNormalizedOutput.normalization_confidence < CLARIFICATION_THRESHOLD) {
-            console.log(`Normalization Guardrail Triggered: Confidence ${finalNormalizedOutput.normalization_confidence} is below threshold ${CLARIFICATION_THRESHOLD}`);
-            return { status: "needs_clarification", message: "Ambiguous date/time or department" };
+            const clarificationResult = { status: "needs_clarification", message: "Ambiguous date/time or department" };
+            context.set(STEP_NAME, clarificationResult);
+            return clarificationResult;
         }
 
+        context.set(STEP_NAME, finalNormalizedOutput);
         return finalNormalizedOutput;
 
     } catch (error) {
         console.error('Normalization Error:', error.message);
-        return { status: "needs_clarification", message: "AI processing failed during normalization" };
+        const clarificationResult = { status: "needs_clarification", message: "AI processing failed during normalization" };
+        context.set(STEP_NAME, clarificationResult);
+        return clarificationResult;
     }
 }
 

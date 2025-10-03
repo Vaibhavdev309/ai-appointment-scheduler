@@ -27,7 +27,6 @@ async function callGemini(prompt, imageBase64 = null, mimeType = 'image/jpeg', o
         // Remove data URI prefix if present in base64 string
         if (imageBase64) {
             imageBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
-            // console.log('Gemini Util: Processed Base64 Length:', imageBase64.length); // Debug log
         }
 
         let generationConfig = {
@@ -45,14 +44,12 @@ async function callGemini(prompt, imageBase64 = null, mimeType = 'image/jpeg', o
                     mimeType: mimeType
                 }
             };
-            console.log('Gemini Util: Calling Gemini with Image (Multimodal)');
             generationResult = await model.generateContent({
                 contents: [{ parts: [{ text: prompt }, imagePart] }],
                 generationConfig: generationConfig
             });
         } else {
             // Text-only input
-            console.log('Gemini Util: Calling Gemini with Text-only');
             generationResult = await model.generateContent({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: generationConfig
@@ -69,8 +66,6 @@ async function callGemini(prompt, imageBase64 = null, mimeType = 'image/jpeg', o
             confidence = parseFloat(confidenceMatch[1]);
         }
 
-        console.log('Gemini Util: Raw Gemini Response (truncated):', text.substring(0, 200) + '...'); // Log first 200 chars
-        console.log('Gemini Util: Extracted Confidence:', confidence);
 
         return { text, confidence: Math.min(1.0, Math.max(0.0, confidence)) }; // Ensure confidence is within [0, 1]
     } catch (error) {
