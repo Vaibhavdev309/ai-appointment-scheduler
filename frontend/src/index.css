@@ -4,9 +4,9 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  @apply bg-gray-100 text-gray-900;
+  @apply bg-gradient-to-r from-blue-50 to-indigo-100 text-gray-900;
 }
 
 #root {
-  @apply min-h-screen flex flex-col items-center justify-center p-4;
+  @apply min-h-screen flex flex-col items-center justify-center p-6;
 }

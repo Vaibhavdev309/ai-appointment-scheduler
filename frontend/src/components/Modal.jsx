@@ -4,28 +4,38 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center border-b pb-3 mb-4">
-                    <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
+        <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+            onClick={onClose}
+        >
+            <div
+                className="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl max-h-[80vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <header className="flex justify-between items-center border-b border-gray-300 pb-3 mb-4">
+                    <h2 id="modal-title" className="text-2xl font-semibold text-gray-900">
+                        {title}
+                    </h2>
                     <button
                         onClick={onClose}
-                        className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                        aria-label="Close modal"
+                        className="text-gray-600 hover:text-gray-900 text-3xl font-bold leading-none focus:outline-none"
                     >
                         &times;
                     </button>
-                </div>
-                <div className="text-gray-700">
-                    {children}
-                </div>
-                <div className="mt-4 flex justify-end">
+                </header>
+                <main className="text-gray-800">{children}</main>
+                <footer className="mt-6 flex justify-end">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        className="px-5 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                     >
                         Close
                     </button>
-                </div>
+                </footer>
             </div>
         </div>
     );
