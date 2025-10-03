@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const multer = require('multer'); // Add this import
+const multer = require('multer');
 
 const app = express();
 
@@ -10,15 +10,14 @@ const app = express();
 app.use(helmet());
 app.use(cors({ origin: '*' }));
 app.use(morgan('combined'));
-app.use(express.json({ limit: '10mb' })); // For JSON bodies (text/base64)
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Configure Multer for file uploads (in-memory, 10MB limit)
 const upload = multer({
-    storage: multer.memoryStorage(), // Keep in RAM, convert to base64 later
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        // Accept common image types
         if (file.mimetype.startsWith('image/')) {
             cb(null, true);
         } else {
@@ -27,14 +26,16 @@ const upload = multer({
     }
 });
 
-// Import routes and middleware
-const { parseAppointment } = require('./controllers/appointmentController');
+// Import controllers and middleware
+const { extractText, extractEntities, normalizeAppointment } = require('./controllers/appointmentController');
 const { validateInput } = require('./middleware/validation');
 
-// API Routes: Add upload middleware for file support
-app.post('/api/appointments/parse', upload.single('image'), validateInput, parseAppointment); // Handles file or JSON
+// API Routes: Apply upload and validation middleware to all endpoints that accept initial input
+app.post('/api/appointments/extract-text', upload.single('image'), validateInput, extractText);
+app.post('/api/appointments/extract-entities', upload.single('image'), validateInput, extractEntities);
+app.post('/api/appointments/normalize', upload.single('image'), validateInput, normalizeAppointment);
 
-// 404 and error handlers (unchanged)
+// 404 and error handlers
 app.use((req, res) => {
     res.status(404).json({ status: 'error', message: 'Endpoint not found' });
 });
