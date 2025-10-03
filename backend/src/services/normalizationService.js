@@ -3,8 +3,15 @@ const { extractEntities } = require('./entityService');
 
 async function normalizeAppointment(context) {
     const STEP_NAME = 'normalization';
-    let cachedResult = context.get(STEP_NAME);
+    let cachedResult = context.getGlobal(STEP_NAME);
     if (cachedResult) {
+        console.log('Global cache hit: normalization');
+        return cachedResult;
+    }
+
+    cachedResult = context.get(STEP_NAME);
+    if (cachedResult) {
+        console.log('Per-request cache hit: normalization');
         return cachedResult;
     }
 
@@ -15,10 +22,10 @@ async function normalizeAppointment(context) {
     const entities = entityExtraction.entities;
     const entitiesConfidence = entityExtraction.extraction_confidence;
 
-    // Guardrail: ambiguous or low confidence entities
     if (!entities || Object.values(entities).every(val => val === '') || entitiesConfidence < 0.5) {
         const guardrail = { status: "needs_clarification", message: "Ambiguous date/time or department" };
         context.set(STEP_NAME, guardrail);
+        context.setGlobal(STEP_NAME, guardrail);
         return guardrail;
     }
 
@@ -63,14 +70,13 @@ Normalize the following:`;
             normalization_confidence = 0.0;
         }
 
-        // Guardrail on confidence
         if (normalization_confidence < CLARIFICATION_THRESHOLD) {
             const guardrail = { status: "needs_clarification", message: "Ambiguous date/time or department" };
             context.set(STEP_NAME, guardrail);
+            context.setGlobal(STEP_NAME, guardrail);
             return guardrail;
         }
 
-        // Round confidence to 2 decimals for strictness
         normalization_confidence = Math.round(normalization_confidence * 100) / 100;
 
         const result = {
@@ -83,11 +89,15 @@ Normalize the following:`;
         };
 
         context.set(STEP_NAME, result);
+        context.setGlobal(STEP_NAME, result);
+
         return result;
 
-    } catch {
+    } catch (error) {
+        console.error('Normalization Error:', error.message);
         const guardrail = { status: "needs_clarification", message: "AI processing failed during normalization" };
         context.set(STEP_NAME, guardrail);
+        context.setGlobal(STEP_NAME, guardrail);
         return guardrail;
     }
 }

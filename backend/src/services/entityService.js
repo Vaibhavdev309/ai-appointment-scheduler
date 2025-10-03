@@ -1,16 +1,20 @@
 const { callGemini } = require('../utils/gemini');
-const { extractRawText } = require('./inputService'); // Import raw text extraction
+const { extractRawText } = require('./inputService');
 
-/**
- * Extracts structured entities from raw text using Gemini.
- * @param {RequestContext} context - The request context object.
- * @returns {Promise<{entities: {department: string, date_phrase: string, time_phrase: string, notes: string}, extraction_confidence: number}>}
- */
 async function extractEntities(context) {
     const STEP_NAME = 'entityExtraction';
-    let cachedResult = context.get(STEP_NAME);
+
+    // 1. Check global cache
+    let cachedResult = context.getGlobal(STEP_NAME);
     if (cachedResult) {
-        console.log('Cache hit: entityExtraction');
+        console.log('Global cache hit: entityExtraction');
+        return cachedResult;
+    }
+
+    // 2. Check per-request cache
+    cachedResult = context.get(STEP_NAME);
+    if (cachedResult) {
+        console.log('Per-request cache hit: entityExtraction');
         return cachedResult;
     }
 
@@ -25,16 +29,17 @@ async function extractEntities(context) {
             extraction_confidence: 0.0
         };
         context.set(STEP_NAME, result);
+        context.setGlobal(STEP_NAME, result);
         return result;
     }
 
-    // Skip if Step 2 confidence too low (avoid bad input)
     if (rawTextConfidence < 0.5) {
         const result = {
             entities: { department: '', date_phrase: '', time_phrase: '', notes: '' },
             extraction_confidence: 0.0
         };
         context.set(STEP_NAME, result);
+        context.setGlobal(STEP_NAME, result);
         return result;
     }
 
@@ -63,29 +68,31 @@ async function extractEntities(context) {
             if (jsonMatch) {
                 entities = JSON.parse(jsonMatch[0]);
             } else {
-                console.warn('No valid JSON in Gemini response for entity extraction:', text.substring(0, 100));
                 parsedConfidence *= 0.5;
             }
-        } catch (parseError) {
-            console.error('JSON Parse Error in entity extraction:', parseError.message, 'Response:', text);
+        } catch {
             parsedConfidence = 0.0;
         }
 
         const parsedConfidenceRounded = Math.round(parsedConfidence * 100) / 100;
+
         const result = {
             entities,
             extraction_confidence: parsedConfidenceRounded
         };
-        context.set(STEP_NAME, result);
-        return result;
 
+        context.set(STEP_NAME, result);
+        context.setGlobal(STEP_NAME, result);
+
+        return result;
     } catch (error) {
         console.error('Entity Extraction Error:', error.message);
         const result = {
             entities: { department: '', date_phrase: '', time_phrase: '', notes: '' },
             extraction_confidence: 0.0
         };
-        context.set(STEP_NAME, result); // Cache the error result
+        context.set(STEP_NAME, result);
+        context.setGlobal(STEP_NAME, result);
         return result;
     }
 }
