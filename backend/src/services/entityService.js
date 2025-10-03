@@ -4,14 +4,14 @@ const { extractRawText } = require('./inputService');
 async function extractEntities(context) {
     const STEP_NAME = 'entityExtraction';
 
-    // 1. Check global cache
-    let cachedResult = context.getGlobal(STEP_NAME);
+    // 1. Check global cache (now await)
+    let cachedResult = await context.getGlobal(STEP_NAME);
     if (cachedResult) {
         console.log('Global cache hit: entityExtraction');
         return cachedResult;
     }
 
-    // 2. Check per-request cache
+    // 2. Check per-request cache (synchronous)
     cachedResult = context.get(STEP_NAME);
     if (cachedResult) {
         console.log('Per-request cache hit: entityExtraction');
@@ -19,6 +19,7 @@ async function extractEntities(context) {
     }
 
     // Ensure raw text is extracted first (will use cache if available)
+    // Note: extractRawText itself now uses await for global cache
     const textExtraction = await extractRawText(context);
     const rawText = textExtraction.raw_text;
     const rawTextConfidence = textExtraction.confidence;
@@ -29,7 +30,7 @@ async function extractEntities(context) {
             extraction_confidence: 0.0
         };
         context.set(STEP_NAME, result);
-        context.setGlobal(STEP_NAME, result);
+        await context.setGlobal(STEP_NAME, result); // Await this
         return result;
     }
 
@@ -39,7 +40,7 @@ async function extractEntities(context) {
             extraction_confidence: 0.0
         };
         context.set(STEP_NAME, result);
-        context.setGlobal(STEP_NAME, result);
+        await context.setGlobal(STEP_NAME, result); // Await this
         return result;
     }
 
@@ -82,7 +83,7 @@ async function extractEntities(context) {
         };
 
         context.set(STEP_NAME, result);
-        context.setGlobal(STEP_NAME, result);
+        await context.setGlobal(STEP_NAME, result); // Await this
 
         return result;
     } catch (error) {
@@ -92,7 +93,7 @@ async function extractEntities(context) {
             extraction_confidence: 0.0
         };
         context.set(STEP_NAME, result);
-        context.setGlobal(STEP_NAME, result);
+        await context.setGlobal(STEP_NAME, result); // Await this
         return result;
     }
 }

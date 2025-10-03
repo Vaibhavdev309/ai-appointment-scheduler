@@ -3,14 +3,14 @@ const { callGemini } = require('../utils/gemini');
 async function extractRawText(context) {
     const STEP_NAME = 'rawTextExtraction';
 
-    // 1. Check global cache
-    let cachedResult = context.getGlobal(STEP_NAME);
+    // 1. Check global cache (now await)
+    let cachedResult = await context.getGlobal(STEP_NAME);
     if (cachedResult) {
         console.log('Global cache hit: rawTextExtraction');
         return cachedResult;
     }
 
-    // 2. Check per-request cache
+    // 2. Check per-request cache (synchronous)
     cachedResult = context.get(STEP_NAME);
     if (cachedResult) {
         console.log('Per-request cache hit: rawTextExtraction');
@@ -45,9 +45,9 @@ async function extractRawText(context) {
             confidence: confidenceRounded
         };
 
-        // Cache in both per-request and global caches
+        // Cache in per-request (sync) and global (async) caches
         context.set(STEP_NAME, result);
-        context.setGlobal(STEP_NAME, result);
+        await context.setGlobal(STEP_NAME, result); // Await this
 
         return result;
     } catch (error) {
@@ -57,7 +57,7 @@ async function extractRawText(context) {
             confidence: 0.0
         };
         context.set(STEP_NAME, result);
-        context.setGlobal(STEP_NAME, result);
+        await context.setGlobal(STEP_NAME, result); // Await this
         return result;
     }
 }

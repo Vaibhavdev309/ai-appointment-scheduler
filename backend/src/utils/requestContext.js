@@ -5,7 +5,7 @@ class RequestContext {
         this.input = input;
         this.isImage = isImage;
         this.mimeType = mimeType;
-        this.cache = new Map(); // per-request cache
+        this.cache = new Map(); // per-request cache (still useful for within-request chaining)
         this.inputHash = hashInput(input || ''); // hash of input for global cache key
     }
 
@@ -18,13 +18,13 @@ class RequestContext {
         this.cache.set(stepName, result);
     }
 
-    // Global cache get/set
-    getGlobal(stepName) {
-        return globalCache.get(this.inputHash, stepName);
+    // Global cache get/set (now asynchronous)
+    async getGlobal(stepName) { // Make this async
+        return await globalCache.get(this.inputHash, stepName);
     }
 
-    setGlobal(stepName, result) {
-        globalCache.set(this.inputHash, stepName, result);
+    async setGlobal(stepName, result) { // Make this async
+        await globalCache.set(this.inputHash, stepName, result);
     }
 }
 

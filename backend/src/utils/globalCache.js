@@ -1,30 +1,46 @@
 const crypto = require('crypto');
+const Redis = require('ioredis'); // Import ioredis
+
+// Initialize Redis client
+// Get Redis URL from environment variable
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const redis = new Redis(REDIS_URL);
+
+redis.on('connect', () => console.log('Connected to Redis!'));
+redis.on('error', (err) => console.error('Redis Client Error', err));
 
 class GlobalCache {
-    constructor(ttlMs = 10 * 60 * 1000) { // 10 minutes TTL by default
-        this.cache = new Map();
-        this.ttlMs = ttlMs;
+    constructor(ttlMs = 10 * 60 * 1000) { // default 10 minutes TTL
+        this.ttlSeconds = Math.floor(ttlMs / 1000); // Redis TTL is in seconds
     }
 
     _getKey(inputHash, stepName) {
         return `${inputHash}:${stepName}`;
     }
 
-    set(inputHash, stepName, value) {
+    async set(inputHash, stepName, value) {
         const key = this._getKey(inputHash, stepName);
-        const expiresAt = Date.now() + this.ttlMs;
-        this.cache.set(key, { value, expiresAt });
+        try {
+            // Store value as JSON string in Redis with a TTL
+            await redis.setex(key, this.ttlSeconds, JSON.stringify(value));
+        } catch (error) {
+            console.error(`Failed to set cache for key ${key} in Redis:`, error);
+            // Optionally, implement a fallback or just log the error
+        }
     }
 
-    get(inputHash, stepName) {
+    async get(inputHash, stepName) {
         const key = this._getKey(inputHash, stepName);
-        const entry = this.cache.get(key);
-        if (!entry) return null;
-        if (Date.now() > entry.expiresAt) {
-            this.cache.delete(key);
+        try {
+            const cachedData = await redis.get(key);
+            if (cachedData) {
+                return JSON.parse(cachedData); // Parse the JSON string back to an object
+            }
             return null;
+        } catch (error) {
+            console.error(`Failed to get cache for key ${key} from Redis:`, error);
+            return null; // Treat as cache miss on error
         }
-        return entry.value;
     }
 }
 
