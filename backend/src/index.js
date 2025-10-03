@@ -12,15 +12,12 @@ app.use(morgan('combined')); // Log requests
 app.use(express.json({ limit: '10mb' })); // Parse JSON bodies (large for images)
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded
 
-// Basic health check endpoint (for testing)
-app.get('/health', (req, res) => {
-    res.status(200).json({
-        status: 'OK',
-        message: 'Backend is running',
-        timestamp: new Date().toISOString(),
-        env: process.env.NODE_ENV
-    });
-});
+// Import routes and middleware (ADD THESE LINES IF MISSING)
+const { parseAppointment } = require('./controllers/appointmentController');
+const { validateInput } = require('./middleware/validation');
+
+// API Routes (ADD THIS LINE IF MISSING)
+app.post('/api/appointments/parse', validateInput, parseAppointment);
 
 // 404 handler for undefined routes
 app.use((req, res) => {

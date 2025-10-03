@@ -23,10 +23,15 @@ A backend service for Problem Statement 5: Parses natural language or image-base
 5. Start server: `npm run dev` (uses nodemon for hot reload).
 6. Test: Visit `http://localhost:3000/health`.
 
-## API Usage (Initial)
-- **Health Check**: GET `/health` – Returns server status.
-- **Parse Appointment**: POST `/api/appointments/parse` (body: `{ "input": "text or base64 image" }`) – Full pipeline (TBD).
+## API Usage
+- **Health Check**: GET `/health`
+- **Parse Appointment**: POST `/api/appointments/parse`
+  - Body: JSON `{ "input": "Book dentist next Friday at 3pm" }` (text) or `{ "input": "base64string...", "isImage": true }`
+  - Headers: `Content-Type: application/json`
 
-### Sample Curl Request (Health)
+### Sample Curl Requests
+**Text Input:**
 ```bash
-curl http://localhost:3000/health
+curl -X POST http://localhost:3000/api/appointments/parse \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Book dentist next Friday at 3pm"}'
