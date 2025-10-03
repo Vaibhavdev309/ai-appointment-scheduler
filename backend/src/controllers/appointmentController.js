@@ -1,31 +1,41 @@
 const { extractRawText } = require('../services/inputService');
 
 /**
- * POST /api/appointments/parse - Main endpoint for pipeline.
- * Currently handles only input extraction; will chain full pipeline later.
- * @param {object} req - Express request (body: { input: string, isImage: boolean })
- * @param {object} res - Express response
+ * POST /api/appointments/parse - Handles JSON (text/base64) or file upload (image).
  */
 async function parseAppointment(req, res, next) {
     try {
-        const { input, isImage = false } = req.body;
+        let input, isImage = false, mimeType = 'image/jpeg';
 
-        if (!input) {
-            return res.status(400).json({ status: 'error', message: 'Input (text or base64 image) is required' });
+        // Check for file upload first (Multer)
+        if (req.file) {
+            // File uploaded: Convert buffer to base64
+            input = req.file.buffer.toString('base64');
+            isImage = true;
+            mimeType = req.file.mimetype; // Auto-detect (e.g., 'image/png')
+            console.log('File Uploaded:', req.file.originalname, 'MIME:', mimeType, 'Size:', req.file.size); // Temp log
+        } else {
+            // Fallback to JSON body
+            const { input: bodyInput, isImage: bodyIsImage = false, mimeType: bodyMimeType = 'image/jpeg' } = req.body;
+            if (!bodyInput) {
+                return res.status(400).json({ status: 'error', message: 'Input (text, base64, or file) is required' });
+            }
+            input = bodyInput;
+            isImage = bodyIsImage;
+            mimeType = bodyIsImage ? bodyMimeType : undefined;
         }
 
-        // Step 1: Extract raw text
-        const extraction = await extractRawText(input, isImage);
+        // Extract raw text (service handles text/image)
+        const extraction = await extractRawText(input, isImage, mimeType);
 
-        // For now, return only Step 1 output (full pipeline later)
         res.status(200).json({
-            status: 'partial', // Will be 'ok' when full
+            status: 'partial',
             step: 'text_extraction',
             data: extraction,
             message: 'Raw text extracted; full pipeline TBD'
         });
     } catch (error) {
-        next(error); // Pass to global error handler
+        next(error);
     }
 }
 
