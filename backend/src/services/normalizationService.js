@@ -4,24 +4,21 @@ const { callGemini } = require('../utils/gemini');
  * Normalizes extracted entities into a standard ISO format.
  * @param {{date_phrase: string, time_phrase: string, department: string, notes: string}} entities - Entities from Step 2.
  * @param {number} entitiesConfidence - Confidence from Step 2.
- * @returns {Promise<{date: string, time: string, tz: string, normalization_confidence: number}>}
+ * @returns {Promise<{normalized: {date: string, time: string, tz: string}, normalization_confidence: number} | {status: string, message: string}>}
  */
 async function normalizeAppointment(entities, entitiesConfidence) {
-    // Default timezone for normalization
     const TIMEZONE = "Asia/Kolkata";
+    const CLARIFICATION_THRESHOLD = 0.6; // Define a threshold for clarification
 
-    // If no entities or very low confidence, return empty normalized data
-    if (!entities || Object.values(entities).every(val => val === '') || entitiesConfidence < 0.6) {
-        console.log('Skipping normalization: Low entities confidence or no entities');
-        return {
-            date: '',
-            time: '',
-            tz: TIMEZONE,
-            normalization_confidence: 0.0
-        };
+    // Initial check: If no entities or very low confidence from previous steps,
+    // immediately return needs_clarification.
+    if (!entities || Object.values(entities).every(val => val === '') || entitiesConfidence < 0.5) {
+        console.log('Normalization Guardrail Triggered: Low initial entities confidence or no entities.');
+        return { status: "needs_clarification", message: "Ambiguous date/time or department" };
     }
 
     // Construct a more detailed prompt for Gemini to handle date/time inference
+    // WITHOUT asking it to calculate the detailed confidence.
     const prompt = `You are an appointment normalization assistant. Given the following extracted appointment details, convert them into a standardized JSON format.
   Assume today's date is ${new Date().toISOString().split('T')[0]} and the timezone is ${TIMEZONE} for relative date/time calculations.
 
@@ -50,7 +47,8 @@ async function normalizeAppointment(entities, entitiesConfidence) {
         const { text, confidence: geminiConfidence } = await callGemini(prompt);
 
         let normalized = { date: '', time: '', tz: TIMEZONE };
-        let normalization_confidence = Math.min(geminiConfidence, entitiesConfidence); // Combine confidences
+        // Reverted confidence calculation: simply combine with previous step's confidence
+        let normalization_confidence = Math.min(geminiConfidence, entitiesConfidence);
 
         try {
             const jsonMatch = text.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
@@ -66,20 +64,26 @@ async function normalizeAppointment(entities, entitiesConfidence) {
         }
 
         // Ensure the output matches the exact format
-        return {
-            date: normalized.date || '',
-            time: normalized.time || '',
-            tz: normalized.tz || TIMEZONE,
+        const finalNormalizedOutput = {
+            normalized: {
+                date: normalized.date || '',
+                time: normalized.time || '',
+                tz: normalized.tz || TIMEZONE,
+            },
             normalization_confidence: normalization_confidence
         };
+
+        // --- GUARDRAIL CONDITION ---
+        if (finalNormalizedOutput.normalization_confidence < CLARIFICATION_THRESHOLD) {
+            console.log(`Normalization Guardrail Triggered: Confidence ${finalNormalizedOutput.normalization_confidence} is below threshold ${CLARIFICATION_THRESHOLD}`);
+            return { status: "needs_clarification", message: "Ambiguous date/time or department" };
+        }
+
+        return finalNormalizedOutput;
+
     } catch (error) {
         console.error('Normalization Error:', error.message);
-        return {
-            date: '',
-            time: '',
-            tz: TIMEZONE,
-            normalization_confidence: 0.0
-        };
+        return { status: "needs_clarification", message: "AI processing failed during normalization" };
     }
 }
 

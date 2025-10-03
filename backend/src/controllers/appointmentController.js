@@ -73,6 +73,7 @@ async function extractEntities(req, res, next) {
  * This endpoint will first perform text extraction and entity extraction internally.
  * Input: raw text string or image (multipart/form-data or base64 in JSON)
  * Expected Output: { normalized: { date: string, time: string, tz: string }, normalization_confidence: number }
+ * OR {status: "needs_clarification", message: "Ambiguous date/time or department"}
  */
 async function normalizeAppointment(req, res, next) {
     try {
@@ -83,20 +84,64 @@ async function normalizeAppointment(req, res, next) {
         const entityExtraction = await serviceExtractEntities(textExtraction.raw_text, textExtraction.confidence);
 
         // Step 3: Normalize extracted entities
-        const normalizedData = await serviceNormalizeAppointment(entityExtraction.entities, entityExtraction.extraction_confidence);
+        const normalizationResult = await serviceNormalizeAppointment(entityExtraction.entities, entityExtraction.extraction_confidence);
 
-        // Ensure the output matches the specified format
+        // Check if the normalization service returned a guardrail condition
+        if (normalizationResult.status === "needs_clarification") {
+            return res.status(200).json(normalizationResult); // Return the guardrail JSON directly
+        }
+
+        // Otherwise, return the successfully normalized data
         res.status(200).json({
             normalized: {
-                date: normalizedData.date || "",
-                time: normalizedData.time || "",
-                tz: normalizedData.tz || "Asia/Kolkata" // Default to Asia/Kolkata if not explicitly set
+                date: normalizationResult.normalized.date || "",
+                time: normalizationResult.normalized.time || "",
+                tz: normalizationResult.normalized.tz || "Asia/Kolkata"
             },
-            normalization_confidence: normalizedData.normalization_confidence
+            normalization_confidence: normalizationResult.normalization_confidence
         });
     } catch (error) {
         next(error);
     }
 }
 
-module.exports = { extractText, extractEntities, normalizeAppointment };
+/**
+ * POST /api/appointments/final-json - Step 4: Combine entities and normalized values into final JSON.
+ * This endpoint will perform text extraction, entity extraction, and normalization internally.
+ * Input: raw text string or image (multipart/form-data or base64 in JSON)
+ * Expected Output: { appointment: { department: string, date: string, time: string, tz: string }, status: "ok" }
+ * OR {status: "needs_clarification", message: "Ambiguous date/time or department"}
+ */
+async function getFinalAppointmentJson(req, res, next) {
+    try {
+        // Step 1: Extract raw text
+        const textExtraction = await processInputToRawText(req);
+
+        // Step 2: Extract entities from raw_text
+        const entityExtraction = await serviceExtractEntities(textExtraction.raw_text, textExtraction.confidence);
+
+        // Step 3: Normalize extracted entities
+        const normalizationResult = await serviceNormalizeAppointment(entityExtraction.entities, entityExtraction.extraction_confidence);
+
+        // Check if the normalization service returned a guardrail condition
+        if (normalizationResult.status === "needs_clarification") {
+            return res.status(200).json(normalizationResult); // Return the guardrail JSON directly
+        }
+
+        // If no guardrail, combine the data into the final format
+        res.status(200).json({
+            appointment: {
+                department: entityExtraction.entities.department || "", // Use department from entity extraction
+                date: normalizationResult.normalized.date || "",
+                time: normalizationResult.normalized.time || "",
+                tz: normalizationResult.normalized.tz || "Asia/Kolkata"
+            },
+            status: "ok"
+        });
+
+    } catch (error) {
+        next(error);
+    }
+}
+
+module.exports = { extractText, extractEntities, normalizeAppointment, getFinalAppointmentJson };
