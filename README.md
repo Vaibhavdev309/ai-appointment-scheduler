@@ -35,3 +35,9 @@ A backend service for Problem Statement 5: Parses natural language or image-base
 curl -X POST http://localhost:3000/api/appointments/parse \
   -H "Content-Type: application/json" \
   -d '{"input": "Book dentist next Friday at 3pm"}'
+
+  ### Step 3: Entity Extraction
+- Service: `entityService.js` - Parses raw_text into JSON entities (department, date ISO, time 24h, notes).
+- Prompt: Few-shot for accuracy; strict JSON output.
+- Response: Nested data with text + entities; skips if low confidence.
+- Test: POST with sample text/image → Check "entity_extraction".
