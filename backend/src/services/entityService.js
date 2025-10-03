@@ -71,12 +71,14 @@ async function extractEntities(context) {
             parsedConfidence = 0.0;
         }
 
+        const parsedConfidenceRounded = Math.round(parsedConfidence * 100) / 100;
         const result = {
             entities,
-            extraction_confidence: parsedConfidence
+            extraction_confidence: parsedConfidenceRounded
         };
-        context.set(STEP_NAME, result); // Cache the result
+        context.set(STEP_NAME, result);
         return result;
+
     } catch (error) {
         console.error('Entity Extraction Error:', error.message);
         const result = {

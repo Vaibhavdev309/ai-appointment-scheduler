@@ -35,11 +35,12 @@ async function extractRawText(context) {
         const jsonStart = text.indexOf('{');
         const rawText = jsonStart > 0 ? text.substring(0, jsonStart).trim() : text;
 
+        const confidenceRounded = Math.round((confidence || (isImage ? 0.85 : 0.95)) * 100) / 100;
         const result = {
             raw_text: rawText || input,
-            confidence: confidence || (isImage ? 0.85 : 0.95)
+            confidence: confidenceRounded
         };
-        context.set(STEP_NAME, result); // Cache the result
+        context.set(STEP_NAME, result);
         return result;
     } catch (error) {
         console.error('Raw Text Extraction Error:', error.message);

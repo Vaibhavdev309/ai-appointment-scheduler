@@ -74,12 +74,11 @@ async function normalizeAppointmentController(req, res, next) {
         if (normalizationResult.status === "needs_clarification") {
             return res.status(200).json(normalizationResult);
         }
-
         res.status(200).json({
             normalized: {
-                date: normalizationResult.normalized.date || "",
-                time: normalizationResult.normalized.time || "",
-                tz: normalizationResult.normalized.tz || "Asia/Kolkata"
+                date: normalizationResult.normalized.date,
+                time: normalizationResult.normalized.time,
+                tz: normalizationResult.normalized.tz
             },
             normalization_confidence: normalizationResult.normalization_confidence
         });
@@ -104,16 +103,22 @@ async function getFinalAppointmentJsonController(req, res, next) {
         if (normalizationResult.status === "needs_clarification") {
             return res.status(200).json(normalizationResult);
         }
-
-        // Retrieve entities from context cache, as normalizeAppointment would have already computed it
+        // Map department to expected final output name (e.g., "dentist" -> "Dentistry")
+        const departmentMap = {
+            dentist: "Dentistry",
+            cardiologist: "Cardiology",
+            general: "General",
+            // Add other mappings as needed
+        };
         const entityExtraction = context.get('entityExtraction');
-
+        const deptRaw = entityExtraction?.entities?.department?.toLowerCase() || "";
+        const departmentFinal = departmentMap[deptRaw] || entityExtraction?.entities?.department || "";
         res.status(200).json({
             appointment: {
-                department: entityExtraction.entities.department || "",
-                date: normalizationResult.normalized.date || "",
-                time: normalizationResult.normalized.time || "",
-                tz: normalizationResult.normalized.tz || "Asia/Kolkata"
+                department: departmentFinal,
+                date: normalizationResult.normalized.date,
+                time: normalizationResult.normalized.time,
+                tz: normalizationResult.normalized.tz
             },
             status: "ok"
         });
