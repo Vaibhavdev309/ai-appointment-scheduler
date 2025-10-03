@@ -1,14 +1,14 @@
 const { extractRawText } = require('../services/inputService');
-const { extractEntities } = require('../services/entityService'); // New import
+const { extractEntities } = require('../services/entityService');
 
 /**
- * POST /api/appointments/parse - Full pipeline: Extract text → Extract entities.
+ * POST /api/appointments/parse - Full pipeline with guardrail for ambiguity.
  */
 async function parseAppointment(req, res, next) {
     try {
         let input, isImage = false, mimeType = 'image/jpeg';
 
-        // Handle file or JSON (from Step 2)
+        // Handle file or JSON (unchanged)
         if (req.file) {
             input = req.file.buffer.toString('base64');
             isImage = true;
@@ -30,7 +30,28 @@ async function parseAppointment(req, res, next) {
         // Step 3: Extract entities from raw_text
         const entityExtraction = await extractEntities(textExtraction.raw_text, textExtraction.confidence);
 
-        // Combined response
+        // Guardrail: Check for ambiguity / needs clarification
+        const isAmbiguous =
+            textExtraction.confidence < 0.6 ||  // Poor input quality
+            entityExtraction.extraction_confidence < 0.7 ||  // Low entity certainty
+            !entityExtraction.entities.department ||  // Missing department
+            !entityExtraction.entities.date ||  // Missing date
+            !entityExtraction.entities.time;  // Missing time (notes optional)
+
+        if (isAmbiguous) {
+            console.log('Guardrail Triggered: Ambiguous extraction'); // Temp log
+            return res.status(200).json({  // 200 for soft error (not failure)
+                status: 'needs_clarification',
+                message: 'Ambiguous date/time or department',
+                data: {  // Include data for debugging / frontend display
+                    text_extraction: textExtraction,
+                    entity_extraction: entityExtraction
+                },
+                suggestion: 'Please provide more details, e.g., specific date, time, and department.'
+            });
+        }
+
+        // Success: Clear extraction
         res.status(200).json({
             status: 'success',
             step: 'full_extraction',

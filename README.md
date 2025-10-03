@@ -41,3 +41,9 @@ curl -X POST http://localhost:3000/api/appointments/parse \
 - Prompt: Few-shot for accuracy; strict JSON output.
 - Response: Nested data with text + entities; skips if low confidence.
 - Test: POST with sample text/image → Check "entity_extraction".
+
+### Guardrail / Exit Condition
+- After entity extraction: Checks for ambiguity (confidence <0.7, missing department/date/time).
+- Triggers: `{"status": "needs_clarification", "message": "Ambiguous date/time or department"}` with data for clarification.
+- Purpose: Prevents invalid bookings; prompts user for details.
+- Test: Vague input like "See doctor" → Guardrail response.
