@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const multer = require('multer');
 
 const app = express();
 
@@ -13,33 +12,16 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Configure Multer for file uploads (in-memory, 10MB limit)
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('image/')) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only image files allowed'), false);
-        }
-    }
+// Import routes
+const appointmentRoutes = require('./routes/appointmentRoutes');
+
+// Health Check Endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', message: 'Service is healthy' });
 });
 
-// Import controllers and middleware
-const {
-    extractTextController,
-    extractEntitiesController,
-    normalizeAppointmentController,
-    getFinalAppointmentJsonController
-} = require('./controllers/appointmentController'); // Updated import names
-const { validateInput } = require('./middleware/validation');
-
-// API Routes: Apply upload and validation middleware to all endpoints that accept initial input
-app.post('/api/appointments/extract-text', upload.single('image'), validateInput, extractTextController);
-app.post('/api/appointments/extract-entities', upload.single('image'), validateInput, extractEntitiesController);
-app.post('/api/appointments/normalize', upload.single('image'), validateInput, normalizeAppointmentController);
-app.post('/api/appointments/final-json', upload.single('image'), validateInput, getFinalAppointmentJsonController);
+// API Routes
+app.use('/api/appointments', appointmentRoutes);
 
 // 404 and error handlers
 app.use((req, res) => {
@@ -48,7 +30,9 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
     console.error('Error:', err.stack);
-    if (err instanceof multer.MulterError) {
+    // Multer errors are now handled within the upload middleware or its calling context if needed,
+    // but a general error handler for MulterError is still good practice if it bubbles up.
+    if (err.name === 'MulterError') {
         return res.status(400).json({ status: 'error', message: `Upload error: ${err.message}` });
     }
     res.status(err.status || 500).json({
