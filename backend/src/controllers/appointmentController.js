@@ -20,11 +20,6 @@ function createRequestContext(req) {
     return new RequestContext(input, isImage, mimeType);
 }
 
-/**
- * POST /api/appointments/extract-text - Step 1: Extract raw text from input.
- * Input: raw text string or image (multipart/form-data or base64 in JSON)
- * Expected Output: { raw_text: string, confidence: number }
- */
 async function extractTextController(req, res, next) {
     try {
         const context = createRequestContext(req);
@@ -38,11 +33,7 @@ async function extractTextController(req, res, next) {
     }
 }
 
-/**
- * POST /api/appointments/extract-entities - Step 2: Extract entities from raw text.
- * Input: raw text string or image (multipart/form-data or base64 in JSON)
- * Expected Output: { entities: { date_phrase: string, time_phrase: string, department: string }, entities_confidence: number }
- */
+
 async function extractEntitiesController(req, res, next) {
     try {
         const context = createRequestContext(req);
@@ -60,12 +51,7 @@ async function extractEntitiesController(req, res, next) {
     }
 }
 
-/**
- * POST /api/appointments/normalize - Step 3: Normalize extracted entities.
- * Input: raw text string or image (multipart/form-data or base64 in JSON)
- * Expected Output: { normalized: { date: string, time: string, tz: string }, normalization_confidence: number }
- * OR {status: "needs_clarification", message: "Ambiguous date/time or department"}
- */
+
 async function normalizeAppointmentController(req, res, next) {
     try {
         const context = createRequestContext(req);
@@ -88,26 +74,18 @@ async function normalizeAppointmentController(req, res, next) {
     }
 }
 
-/**
- * POST /api/appointments/final-json - Step 4: Combine entities and normalized values into final JSON.
- * Input: raw text string or image (multipart/form-data or base64 in JSON)
- * Expected Output: { appointment: { department: string, date: string, time: string, tz: string }, status: "ok" }
- * OR {status: "needs_clarification", message: "Ambiguous date/time or department"}
- */
+
 async function getFinalAppointmentJsonController(req, res, next) {
     try {
         const context = createRequestContext(req);
-        // Calling normalizeAppointment will internally call extractEntities and extractRawText,
-        // all leveraging the request-scoped cache and now the global Redis cache.
+
         const normalizationResult = await normalizeAppointment(context); // Await the async service call
 
         if (normalizationResult.status === "needs_clarification") {
             return res.status(200).json(normalizationResult);
         }
 
-        // Retrieve entities from context cache, as normalizeAppointment would have already computed it
-        // Note: This `get` is for the per-request cache, which is synchronous.
-        // The entityExtraction result would have been set in the per-request cache by normalizeAppointment.
+
         const entityExtraction = context.get('entityExtraction');
 
         // Map department to expected final output name

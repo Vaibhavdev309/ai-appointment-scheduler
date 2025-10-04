@@ -18,7 +18,6 @@ class RequestContext {
         this.cache.set(stepName, result);
     }
 
-    // Global cache get/set (now asynchronous)
     async getGlobal(stepName) { // Make this async
         return await globalCache.get(this.inputHash, stepName);
     }
