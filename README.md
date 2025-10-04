@@ -310,6 +310,13 @@ npm test -- --coverage
 
 ---
 
+## Live Hosted URLs
+
+- **Frontend**: [https://appoai.vercel.app/](https://appoai.vercel.app/)  
+- **Backend API**: [https://ai-appointment-scheduler.onrender.com](https://ai-appointment-scheduler.onrender.com)
+
+---
+
 ## Contributing
 
 Contributions are welcome! Please open issues or pull requests for bug fixes, features, or improvements.
@@ -323,12 +330,9 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 Thank you for exploring the AI-Powered Appointment Scheduler Assistant backend!  
-For questions or support, please contact the maintainer.
 
 ---
 
 *End of README.md*
 
----
-
-If you want, I can also help generate example `.env.example`, sample test files, or code snippets for any part of the pipeline. Just ask!
+--=
