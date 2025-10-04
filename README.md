@@ -201,16 +201,16 @@ The service exposes several endpoints for processing appointment requests in a s
 
 ### **Sample cURL Requests**
 
-You can use these cURL commands to test the endpoints.
+You can use these cURL commands to test the endpoints. Remember to replace `YOUR_BASE_URL` with either `http://localhost:3000` for local testing or `https://ai-appointment-scheduler.onrender.com` for the deployed server.
 
 1.  **Health Check**:
     ```bash
-    curl -X GET http://localhost:3000/health
+    curl -X GET YOUR_BASE_URL/health
     ```
 
 2.  **Text Input (JSON Body) - Final JSON Endpoint**:
     ```bash
-    curl -X POST http://localhost:3000/api/appointments/final-json \
+    curl -X POST YOUR_BASE_URL/api/appointments/final-json \
       -H "Content-Type: application/json" \
       -d '{"input": "I need to see a cardiologist on October 26th at 10 AM for a follow-up."}'
     ```
@@ -220,7 +220,7 @@ You can use these cURL commands to test the endpoints.
     *   Replace `YOUR_BASE64_IMAGE_STRING_HERE` with your actual base64 string.
 
     ```bash
-    curl -X POST http://localhost:3000/api/appointments/final-json \
+    curl -X POST YOUR_BASE_URL/api/appointments/final-json \
       -H "Content-Type: application/json" \
       -d '{"input": "YOUR_BASE64_IMAGE_STRING_HERE", "isImage": true, "mimeType": "image/png"}'
     ```
@@ -229,7 +229,7 @@ You can use these cURL commands to test the endpoints.
     *   Make sure you have an image file (e.g., `note.png`) in the same directory or provide the correct path.
 
     ```bash
-    curl -X POST http://localhost:3000/api/appointments/final-json \
+    curl -X POST YOUR_BASE_URL/api/appointments/final-json \
       -F "image=@./path/to/your/image.jpg"
     ```
     *(Note: For Windows, you might need to use `--form "image=@note.jpg"` or similar syntax depending on your cURL version and shell.)*
