@@ -7,6 +7,8 @@ This backend service is designed to parse natural language or image-based appoin
 This project addresses Problem Statement 5, focusing on the initial stages of an AI-Powered Appointment Scheduler Assistant:
 1.  **OCR/Text Extraction**: Handling both typed text and noisy image inputs.
 2.  **Entity Extraction**: Identifying key appointment details like department, date phrase, and time phrase.
+3.  **Normalization**: Standardizing extracted entities into a consistent format (e.g., ISO dates, 24-hour times).
+4.  **Final JSON Generation**: Combining all extracted and normalized data into a final, structured appointment object.
 
 ## Architecture Overview
 
@@ -18,10 +20,40 @@ The application follows a modular and layered architecture using Node.js and Exp
     1.  **Input Handling**: Accepts both JSON payloads (for text or base64 images) and `multipart/form-data` (for direct image file uploads).
     2.  **Text Extraction (Step 1)**: Extracts raw text from the input. For images, this involves OCR. A confidence score is provided for the extraction quality.
     3.  **Entity Extraction (Step 2)**: Identifies and extracts structured entities (department, date phrase, time phrase, notes) from the raw text. A confidence score reflects the certainty of entity recognition.
-*   **State Management**: The API is stateless, processing each request independently.
-*   **Error Handling**: Comprehensive error handling is implemented, including specific validation errors, Multer errors, and a global error handler for unexpected issues.
+    4.  **Normalization (Step 3)**: Converts extracted date and time phrases into standardized `YYYY-MM-DD` and `HH:MM` formats, along with a timezone.
+    5.  **Final JSON (Step 4)**: Combines the normalized date/time and extracted department into a final appointment object.
+*   **Caching**: Implements both per-request caching (using `Map`) and global caching (using Redis) to optimize performance and reduce redundant AI calls for identical inputs.
+*   **State Management**: The API is stateless, processing each request independently, with caching mechanisms to improve efficiency.
+*   **Error Handling**: Comprehensive error handling is implemented, including specific validation errors, Multer errors, and a global error handler for unexpected issues. Guardrails are in place to return "needs_clarification" for low-confidence extractions or normalizations.
 *   **Security**: Basic security measures are in place using `helmet` for HTTP headers and `cors` for cross-origin requests. Input size limits are enforced.
-*   **Code Organization**: The codebase is structured into `controllers`, `services`, `middleware`, and `utils` directories for clear separation of concerns and reusability.
+*   **Code Organization**: The codebase is structured into `controllers`, `services`, `middleware`, `routes`, and `utils` directories for clear separation of concerns and reusability.
+
+.
+├── controllers/
+│ └── appointmentController.js # Handles API request/response logic for appointment processing
+│
+├── middleware/
+│ ├── upload.js # Multer configuration for file uploads
+│ └── validation.js # Input validation middleware
+│
+├── routes/
+│ └── appointmentRoutes.js # Defines API routes for appointment processing
+│
+├── services/
+│ ├── entityService.js # Logic for extracting entities using Gemini
+│ ├── inputService.js # Logic for extracting raw text (OCR) using Gemini
+│ └── normalizationService.js # Logic for normalizing extracted entities using Gemini
+│
+├── utils/
+│ ├── gemini.js # Wrapper for Google Gemini API calls
+│ ├── globalCache.js # Redis-based global caching mechanism
+│ └── requestContext.js # Manages per-request and global caching context
+│
+├── .env.example # Example environment variables file
+├── index.js # Main Express app setup, global middleware, and route mounting
+├── package.json # Project dependencies and scripts
+├── server.js # Entry point to start the Node.js server
+└── README.md # Project documentation
 
 ## Setup Instructions
 
@@ -29,8 +61,8 @@ Follow these steps to get the project up and running on your local machine.
 
 1.  **Clone the Repository**:
     ```bash
-    git clone https://github.com/yourusername/ai-appointment-scheduler-backend.git
-    cd ai-appointment-scheduler-backend
+    git clone <your-repository-url>
+    cd ai-appointment-scheduler-backend # or whatever your project folder is named
     ```
 
 2.  **Install Dependencies**:
@@ -42,11 +74,13 @@ Follow these steps to get the project up and running on your local machine.
     *   Create a `.env` file in the root directory of the project.
     *   Copy the contents from `.env.example` into your new `.env` file.
     *   Obtain a `GEMINI_API_KEY` from the Google AI Studio (or Google Cloud Console) and replace `YOUR_GEMINI_API_KEY_HERE` with your actual key.
+    *   If you plan to use Redis caching, set `REDIS_URL` (e.g., `redis://localhost:6379`). If not set, Redis caching will attempt to connect to `redis://localhost:6379` by default, but the application will still function without a running Redis instance (though caching will be ineffective).
     *   You can also adjust `PORT` and `NODE_ENV` if needed.
 
     `.env` example:
     ```
     GEMINI_API_KEY=AIzaSy...
+    REDIS_URL=redis://localhost:6379
     PORT=3000
     NODE_ENV=development
     ```
@@ -55,12 +89,14 @@ Follow these steps to get the project up and running on your local machine.
     ```bash
     npm run dev
     ```
-    The server will start on the specified `PORT` (default: 3000). You should see a message like:
+    The server will start on the specified `PORT` (default: 3000). You should see messages like:
     `Server running on port 3000 in development mode`
+    `Access health check at: http://localhost:3000/health`
+    `Access appointment parsing at: http://localhost:3000/api/appointments/parse` (Note: this is a conceptual endpoint, actual endpoints are more granular)
 
 ## API Usage
 
-The service exposes a single primary endpoint for parsing appointment requests.
+The service exposes several endpoints for processing appointment requests in a step-by-step manner.
 
 ### **Health Check**
 
@@ -74,10 +110,10 @@ The service exposes a single primary endpoint for parsing appointment requests.
     }
     ```
 
-### **Parse Appointment Request (Step 1 & 2)**
+### **Step 1: Extract Raw Text**
 
-*   **Endpoint**: `POST /api/appointments/parse`
-*   **Description**: Processes an appointment request (text or image) to extract raw text and then structured entities.
+*   **Endpoint**: `POST /api/appointments/extract-text`
+*   **Description**: Extracts raw text from the input (text string or image).
 *   **Input**:
     *   **Text Input (JSON Body)**:
         *   `Content-Type`: `application/json`
@@ -89,56 +125,111 @@ The service exposes a single primary endpoint for parsing appointment requests.
     *   **Image File Upload (Multipart Form Data)**:
         *   `Content-Type`: `multipart/form-data`
         *   `form-data field`: `image` (containing the image file)
-
 *   **Expected Output (JSON)**:
     ```json
     {
-      "status": "success",
-      "message": "Raw text and entities extracted successfully",
-      "data": {
-        "text_extraction": {
-          "raw_text": "Book dentist next Friday at 3pm",
-          "confidence": 0.95
-        },
-        "entity_extraction": {
-          "entities": {
-            "department": "dentist",
-            "date_phrase": "next Friday",
-            "time_phrase": "3pm",
-            "notes": ""
-          },
-          "entities_confidence": 0.9
-        }
-      }
+      "raw_text": "Book dentist next Friday at 3pm",
+      "confidence": 0.95
+    }
+    ```
+
+### **Step 2: Extract Entities**
+
+*   **Endpoint**: `POST /api/appointments/extract-entities`
+*   **Description**: Extracts structured entities (department, date phrase, time phrase, notes) from the raw text. This endpoint internally calls `/api/appointments/extract-text` if raw text is not already cached.
+*   **Input**: Same as "Step 1: Extract Raw Text".
+*   **Expected Output (JSON)**:
+    ```json
+    {
+      "entities": {
+        "date_phrase": "next Friday",
+        "time_phrase": "3pm",
+        "department": "dentist"
+      },
+      "entities_confidence": 0.9
+    }
+    ```
+
+### **Step 3: Normalize Appointment**
+
+*   **Endpoint**: `POST /api/appointments/normalize`
+*   **Description**: Normalizes the extracted entities into standardized date, time, and timezone formats. This endpoint internally calls `/api/appointments/extract-entities` (and subsequently `/api/appointments/extract-text`) if entities are not already cached.
+*   **Input**: Same as "Step 1: Extract Raw Text".
+*   **Expected Output (JSON)**:
+    ```json
+    {
+      "normalized": {
+        "date": "2025-09-26",
+        "time": "15:00",
+        "tz": "Asia/Kolkata"
+      },
+      "normalization_confidence": 0.85
+    }
+    ```
+    OR (if clarification is needed)
+    ```json
+    {
+      "status": "needs_clarification",
+      "message": "Ambiguous date/time or department"
+    }
+    ```
+
+### **Step 4: Get Final Appointment JSON**
+
+*   **Endpoint**: `POST /api/appointments/final-json`
+*   **Description**: Combines the extracted department and normalized date/time into a final appointment JSON object. This endpoint internally calls `/api/appointments/normalize` (and its preceding steps) if data is not already cached.
+*   **Input**: Same as "Step 1: Extract Raw Text".
+*   **Expected Output (JSON)**:
+    ```json
+    {
+      "appointment": {
+        "department": "Dentistry",
+        "date": "2025-09-26",
+        "time": "15:00",
+        "tz": "Asia/Kolkata"
+      },
+      "status": "ok"
+    }
+    ```
+    OR (if clarification is needed)
+    ```json
+    {
+      "status": "needs_clarification",
+      "message": "Ambiguous date/time or department"
     }
     ```
 
 ### **Sample cURL Requests**
 
-You can use these cURL commands to test the endpoint.
+You can use these cURL commands to test the endpoints.
 
-1.  **Text Input (JSON Body)**:
+1.  **Health Check**:
     ```bash
-    curl -X POST http://localhost:3000/api/appointments/parse \
+    curl -X GET http://localhost:3000/health
+    ```
+
+2.  **Text Input (JSON Body) - Final JSON Endpoint**:
+    ```bash
+    curl -X POST http://localhost:3000/api/appointments/final-json \
       -H "Content-Type: application/json" \
       -d '{"input": "I need to see a cardiologist on October 26th at 10 AM for a follow-up."}'
     ```
 
-2.  **Base64 Image Input (JSON Body)**:
+3.  **Base64 Image Input (JSON Body) - Final JSON Endpoint**:
     *   First, you'll need a base64 encoded image. You can convert an image to base64 online or using a script.
     *   Replace `YOUR_BASE64_IMAGE_STRING_HERE` with your actual base64 string.
 
     ```bash
-    curl -X POST http://localhost:3000/api/appointments/parse \
+    curl -X POST http://localhost:3000/api/appointments/final-json \
       -H "Content-Type: application/json" \
       -d '{"input": "YOUR_BASE64_IMAGE_STRING_HERE", "isImage": true, "mimeType": "image/png"}'
     ```
 
-3.  **Image File Upload (Multipart Form Data)**:
+4.  **Image File Upload (Multipart Form Data) - Final JSON Endpoint**:
     *   Make sure you have an image file (e.g., `note.png`) in the same directory or provide the correct path.
 
     ```bash
-    curl -X POST http://localhost:3000/api/appointments/parse \
+    curl -X POST http://localhost:3000/api/appointments/final-json \
       -F "image=@./path/to/your/image.jpg"
     ```
     *(Note: For Windows, you might need to use `--form "image=@note.jpg"` or similar syntax depending on your cURL version and shell.)*
@@ -149,28 +240,35 @@ You can use these cURL commands to test the endpoint.
     ```json
     {
       "status": "error",
-      "message": "Validation Error: Input required in request body."
+      "message": "Valid input string required (text or base64)"
     }
     ```
     or
     ```json
     {
       "status": "error",
-      "message": "Validation Error: Only image files are allowed (e.g., JPEG, PNG) for file uploads."
+      "message": "Only image files are allowed (e.g., JPEG, PNG)"
+    }
+    ```
+*   **Multer Error (400 Bad Request)**:
+    ```json
+    {
+      "status": "error",
+      "message": "Upload error: File too large"
     }
     ```
 *   **Not Found Error (404 Not Found)**:
     ```json
     {
       "status": "error",
-      "message": "Endpoint not found. Please check the URL and method."
+      "message": "Endpoint not found"
     }
     ```
 *   **Internal Server Error (500 Internal Server Error)**:
     ```json
     {
       "status": "error",
-      "message": "Internal server error. An unexpected error occurred."
+      "message": "Internal server error"
     }
     ```
 
@@ -178,22 +276,23 @@ You can use these cURL commands to test the endpoint.
 
 This project aims to meet the following criteria:
 
-*   **Correctness of API responses and adherence to JSON schemas**: Responses are structured as specified for Step 1 and Step 2, including `raw_text`, `confidence`, `entities`, and `entities_confidence`.
-*   **Handling of both text and image inputs with OCR**: The `parseAppointment` endpoint correctly processes both JSON text/base64 inputs and `multipart/form-data` image uploads, utilizing Gemini for OCR when an image is provided.
+*   **Correctness of API responses and adherence to JSON schemas**: Responses are structured as specified for each step, including `raw_text`, `confidence`, `entities`, `entities_confidence`, `normalized`, `normalization_confidence`, and the final `appointment` object.
+*   **Handling of both text and image inputs with OCR**: The endpoints correctly process both JSON text/base64 inputs and `multipart/form-data` image uploads, utilizing Gemini for OCR when an image is provided.
 *   **Implementation of guardrails and error handling**:
     *   Input validation middleware (`validateInput`) ensures correct request formats.
     *   Multer errors for file uploads are caught and handled.
-    *   `inputService` and `entityService` include error handling for Gemini API calls and gracefully return default values/low confidence on failure.
+    *   `inputService`, `entityService`, and `normalizationService` include robust error handling for Gemini API calls and gracefully return default values/low confidence or "needs_clarification" on failure or low confidence.
     *   A global error handler catches unhandled exceptions.
-    *   (Note: The specific "needs\_clarification" guardrail from the problem statement is intentionally omitted as per the request to stop at Step 2, but the confidence scores provide a basis for future guardrails.)
+    *   Confidence scores are used to trigger "needs_clarification" responses when processing is uncertain.
 *   **Code organization, clarity, and reusability**:
-    *   Clear separation of concerns into `controllers`, `services`, `middleware`, and `utils`.
+    *   Clear separation of concerns into `controllers`, `services`, `middleware`, `routes`, and `utils`.
     *   Functions are well-defined with JSDoc comments.
     *   Consistent naming conventions.
 *   **Effective use of AI for chaining and validation**:
-    *   Gemini API is used for both raw text extraction (OCR) and entity extraction.
-    *   The pipeline chains `inputService` (Step 1) and `entityService` (Step 2) calls.
-    *   Confidence scores from each step are propagated and combined to provide an overall `entities_confidence`.
+    *   Gemini API is used for raw text extraction (OCR), entity extraction, and normalization.
+    *   The pipeline chains `inputService` (Step 1), `entityService` (Step 2), and `normalizationService` (Step 3) calls, with each step leveraging caching.
+    *   Confidence scores from each step are propagated and combined to provide overall confidence and trigger guardrails.
+*   **Caching Mechanism**: Per-request and global Redis caching are implemented to prevent redundant AI calls for identical inputs, improving performance and reducing API costs.
 
 ---
 
@@ -206,5 +305,3 @@ This project aims to meet the following criteria:
 *   [ ] **Short screen recording**: A video demonstrating the endpoints working with sample inputs (text, base64 image, file upload).
 
 ---
-
-This comprehensive structure and updated code should set you up for a highly professional and well-evaluated project! Remember to replace placeholder values like `YOUR_GEMINI_API_KEY_HERE` and `yourusername` in the `README.md` and `.env` file.
